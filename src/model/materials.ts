@@ -19,6 +19,8 @@ const looks: Record<Exclude<MaterialKey, `paint:${string}` | "powder">, Look> = 
   sabot: { color: "#8e949b", metalness: 1, roughness: 0.45 },
   compound: { color: "#d4c38c", metalness: 0, roughness: 0.85 },
   "polymer-red": { color: "#d13a26", metalness: 0, roughness: 0.32, clearcoat: 0.6 },
+  "polymer-blue": { color: "#2f6fd6", metalness: 0, roughness: 0.32, clearcoat: 0.6 },
+  inert: { color: "#bdb8ab", metalness: 0, roughness: 0.92 },
   explosive: { color: "#e3d293", metalness: 0, roughness: 0.92 },
   incendiary: { color: "#aab0a2", metalness: 0.1, roughness: 0.9 },
   tracer: { color: "#c45c3b", metalness: 0, roughness: 0.9 },

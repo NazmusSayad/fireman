@@ -1,12 +1,12 @@
 import type { Vec } from "./geometry";
-import type { CaseSpec, Cartridge, Extra, Insert, Model, Part, Projectile, ShotshellSpec, TankSpec } from "./types";
+import type { CaseSpec, Extra, Insert, Load, Model, Part, Projectile, ShotshellSpec, TankSpec } from "./types";
 
-export function buildModel(cartridge: Cartridge): Model {
-  const build = cartridge.build;
-  if (build.kind === "metallic") return withBounds(metallic(build.case, build.projectile, cartridge.oal, build.powder.fill), build.powder);
+export function buildModel(load: Load): Model {
+  const build = load.build;
+  if (build.kind === "metallic") return withBounds(metallic(build.case, build.projectile, load.oal, build.powder.fill), build.powder);
   if (build.kind === "shotshell") return withBounds(shotshell(build.shell), build.powder);
-  if (build.kind === "tank") return withBounds(tank(build.tank, cartridge.oal), build.powder);
-  throw new Error(`Unknown build for ${cartridge.id}`);
+  if (build.kind === "tank") return withBounds(tank(build.tank, load.oal), build.powder);
+  throw new Error(`Unknown build for ${load.id}`);
 }
 
 function withBounds(result: { parts: Part[]; extras: Extra[] }, powder: Model["powder"]): Model {
@@ -206,7 +206,7 @@ function projectileParts(projectile: Projectile, base: number): { parts: Part[];
     const coreBottom: Vec = [0, jacket.base];
 
     let start: Vec[] = jacket.base > 0 ? [[0, 0]] : [];
-    if (projectile.tracer) {
+    if (projectile.tracer && jacket.base > 0) {
       const tracerRadius = projectile.tracer.d / 2;
       const tracerTop = projectile.tracer.length;
       start = [[0, tracerTop], [tracerRadius, tracerTop], [tracerRadius, 0]];
@@ -243,6 +243,13 @@ function projectileParts(projectile: Projectile, base: number): { parts: Part[];
         core = [coreBottom, ...innerLow, [shankRadius, jacketTop], [shankRadius, shankBottom], [0, shankBottom]];
         parts.push(part(nose.name, nose.material, [[0, shankBottom], [shankRadius, shankBottom], [shankRadius, jacketTop], ...outerHigh, tip]));
       }
+    }
+
+    if (projectile.tracer && jacket.base === 0) {
+      const tracerTop = projectile.tracer.length;
+      const side = core.slice(1);
+      parts.push(part("Tracer compound", "tracer", [[0, 0], ...clipY(side, 0, tracerTop), [0, tracerTop]]));
+      core = [[0, tracerTop], ...clipY(side, tracerTop, Infinity)];
     }
   }
 

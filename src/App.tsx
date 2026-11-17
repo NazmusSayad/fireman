@@ -3,25 +3,32 @@ import clsx from "clsx";
 import { cartridges, categories } from "./data/cartridges";
 import { buildModel } from "./model/build";
 import { swatchColor } from "./model/materials";
-import type { Cartridge } from "./model/types";
+import type { Cartridge, Load } from "./model/types";
+import { references } from "./scene/ReferenceObjects";
 import { Viewer } from "./scene/Viewer";
 import type { Hover } from "./scene/Round";
 
 export function App() {
   const [selectedId, setSelectedId] = useState("9mm-luger");
+  const [loadId, setLoadId] = useState("fmj");
+  const [referenceId, setReferenceId] = useState("none");
   const [hover, setHover] = useState<Hover>(null);
   const [legendHover, setLegendHover] = useState<string | null>(null);
   const cartridge = cartridges.find((item) => item.id === selectedId);
   if (!cartridge) throw new Error(`Unknown cartridge ${selectedId}`);
+  const load = cartridge.loads.find((item) => item.id === loadId);
+  if (!load) throw new Error(`Unknown load ${loadId} for ${selectedId}`);
+  const reference = referenceId === "none" ? null : references.find((item) => item.id === referenceId);
+  if (reference === undefined) throw new Error(`Unknown reference ${referenceId}`);
 
   const legend = useMemo(() => {
-    const model = buildModel(cartridge);
+    const model = buildModel(load);
     const entries = new Map<string, string>();
     for (const item of [...model.parts, ...model.extras]) {
       if (!entries.has(item.name)) entries.set(item.name, swatchColor(item.material));
     }
     return [...entries.entries()];
-  }, [cartridge]);
+  }, [load]);
 
   const highlighted = legendHover ?? hover?.name ?? null;
 
@@ -43,6 +50,7 @@ export function App() {
                     key={item.id}
                     onClick={() => {
                       setSelectedId(item.id);
+                      setLoadId(item.loads[0].id);
                       setHover(null);
                     }}
                     className={clsx(
@@ -51,7 +59,7 @@ export function App() {
                     )}
                   >
                     <span className="truncate">{item.name}</span>
-                    <span className="shrink-0 text-[11px] text-neutral-600">{item.load}</span>
+                    <span className="shrink-0 text-[11px] text-neutral-600">{item.loads.length > 1 ? `${item.loads.length} loads` : item.loads[0].name}</span>
                   </button>
                 ))}
             </div>
@@ -59,17 +67,65 @@ export function App() {
         </nav>
       </aside>
 
-      <main className="relative min-w-0 flex-1">
-        <Viewer cartridge={cartridge} hover={hover} highlighted={highlighted} onHover={setHover} />
+      <main className="flex min-w-0 flex-1 flex-col">
+        <div className="flex h-12 shrink-0 items-center gap-4 border-b border-white/5 px-4">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {cartridge.loads.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setLoadId(item.id);
+                  setHover(null);
+                }}
+                className={clsx(
+                  "flex shrink-0 items-baseline gap-1.5 rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-colors",
+                  item.id === load.id ? "bg-white/10 text-white" : "text-neutral-400 hover:bg-white/5 hover:text-neutral-200",
+                )}
+              >
+                {item.type}
+                <span className={clsx("text-[11px]", item.id === load.id ? "text-neutral-400" : "text-neutral-600")}>{item.name}</span>
+              </button>
+            ))}
+          </div>
+          <label className="flex shrink-0 items-center gap-2 text-xs text-neutral-500">
+            Compare with
+            <select
+              value={referenceId}
+              onChange={(event) => {
+                setReferenceId(event.target.value);
+                setHover(null);
+              }}
+              className="rounded-md bg-white/5 px-2 py-1 text-sm text-neutral-200 ring-1 ring-white/10 outline-none hover:bg-white/10 focus-visible:ring-blue-500"
+            >
+              <option value="none">Nothing</option>
+              {references.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="relative min-h-0 flex-1">
+          <Viewer
+            load={load}
+            frameId={`${cartridge.id}/${load.id}`}
+            reference={reference}
+            hover={hover}
+            highlighted={highlighted}
+            onHover={setHover}
+          />
+        </div>
       </main>
 
       <section className="w-80 shrink-0 overflow-y-auto border-l border-white/5 bg-neutral-950 px-6 py-6">
         <h2 className="text-xl font-semibold tracking-tight text-white">{cartridge.name}</h2>
         <p className="mt-0.5 text-sm text-neutral-500">{cartridge.aliases}</p>
         <p className="mt-4 text-sm leading-relaxed text-neutral-400">{cartridge.note}</p>
+        {load.note && <p className="mt-2 text-sm leading-relaxed text-neutral-400">{load.note}</p>}
 
-        <Specs title="Dimensions" rows={dimensionRows(cartridge)} />
-        <Specs title="Ballistics" rows={ballisticRows(cartridge)} />
+        <Specs title="Dimensions" rows={dimensionRows(cartridge, load)} />
+        <Specs title="Ballistics" rows={ballisticRows(cartridge, load)} />
         <Specs title="Construction" rows={constructionRows(cartridge)} />
 
         <h3 className="mt-7 mb-2 text-[11px] font-medium tracking-wider text-neutral-500 uppercase">Parts</h3>
@@ -125,11 +181,11 @@ function diameterLabel(cartridge: Cartridge) {
   return "Bullet diameter";
 }
 
-function dimensionRows(cartridge: Cartridge): [string, string][] {
+function dimensionRows(cartridge: Cartridge, load: Load): [string, string][] {
   return [
     [diameterLabel(cartridge), length(cartridge.boreD)],
     [cartridge.category === "Shotgun" ? "Shell length" : "Case length", length(cartridge.caseLength)],
-    ["Overall length", length(cartridge.oal)],
+    ["Overall length", length(load.oal)],
     ["Rim diameter", length(cartridge.rimD)],
   ];
 }
@@ -147,12 +203,13 @@ function energy(joules: number) {
   return `${format(joules, 0)} J · ${footPounds} ft·lbf`;
 }
 
-function ballisticRows(cartridge: Cartridge): [string, string][] {
-  const joules = 0.5 * (cartridge.projectileMass / 1000) * cartridge.velocity ** 2;
+function ballisticRows(cartridge: Cartridge, load: Load): [string, string][] {
+  const joules = 0.5 * (load.projectileMass / 1000) * load.velocity ** 2;
   const rows: [string, string][] = [
-    ["Load", cartridge.load],
-    [cartridge.category === "Shotgun" ? "Payload" : "Projectile", mass(cartridge.projectileMass)],
-    ["Muzzle velocity", `${format(cartridge.velocity, 0)} m/s · ${format(cartridge.velocity * 3.28084, 0)} ft/s`],
+    ["Load", load.name],
+    ["Type", load.type],
+    [cartridge.category === "Shotgun" ? "Payload" : "Projectile", mass(load.projectileMass)],
+    ["Muzzle velocity", `${format(load.velocity, 0)} m/s · ${format(load.velocity * 3.28084, 0)} ft/s`],
     ["Muzzle energy", energy(joules)],
   ];
   if (cartridge.pressure) {

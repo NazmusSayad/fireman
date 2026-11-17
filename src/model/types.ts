@@ -17,6 +17,8 @@ export type MaterialKey =
   | "powder"
   | "compound"
   | "polymer-red"
+  | "polymer-blue"
+  | "inert"
   | "explosive"
   | "incendiary"
   | "tracer"
@@ -130,6 +132,17 @@ export type Build =
   | { kind: "shotshell"; shell: ShotshellSpec; powder: Powder }
   | { kind: "tank"; tank: TankSpec; powder: Powder };
 
+export type Load = {
+  id: string;
+  name: string;
+  type: string;
+  note?: string;
+  oal: number;
+  projectileMass: number;
+  velocity: number;
+  build: Build;
+};
+
 export type Cartridge = {
   id: string;
   name: string;
@@ -137,17 +150,13 @@ export type Cartridge = {
   category: Category;
   note: string;
   introduced: string;
-  load: string;
-  oal: number;
   boreD: number;
   caseLength: number;
   rimD: number;
-  projectileMass: number;
-  velocity: number;
   pressure?: { mpa: number; standard: string };
   primer: string;
   caseMaterial: string;
-  build: Build;
+  loads: Load[];
 };
 
 export type Part = {

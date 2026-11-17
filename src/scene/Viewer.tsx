@@ -3,24 +3,40 @@ import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, Lightformer, OrbitControls } from "@react-three/drei";
 import { buildModel } from "../model/build";
-import type { Cartridge } from "../model/types";
+import type { Load } from "../model/types";
+import { ReferenceObject, type Reference } from "./ReferenceObjects";
 import { Round, type Hover } from "./Round";
 
 type Props = {
-  cartridge: Cartridge;
+  load: Load;
+  frameId: string;
+  reference: Reference | null;
   hover: Hover;
   highlighted: string | null;
   onHover: (hover: Hover) => void;
 };
 
 export function Viewer(props: Props) {
-  const model = useMemo(() => buildModel(props.cartridge), [props.cartridge]);
+  const model = useMemo(() => buildModel(props.load), [props.load]);
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
+  const reference = props.reference;
   const spacing = model.radius * 2 + Math.max(model.radius * 1.4, model.height * 0.1);
-  const labelY = model.height + Math.max(model.height * 0.06, model.radius * 0.6);
+  const left = -spacing / 2 - model.radius;
+  const roundsRight = spacing / 2 + model.radius;
+  const referenceX = reference ? roundsRight + Math.max(spacing - model.radius * 2, reference.width * 0.25) + reference.width / 2 : 0;
+  const right = reference ? referenceX + reference.width / 2 : roundsRight;
+  const sceneHeight = reference ? Math.max(model.height, reference.height) : model.height;
+  const depth = reference ? Math.max(model.radius * 2, reference.depth) : model.radius * 2;
+  const labelGap = Math.max(sceneHeight * 0.06, model.radius * 0.6);
+  const labelY = model.height + labelGap;
+  const referenceLabelY = reference ? reference.height + labelGap : 0;
+  const centerX = (left + right) / 2;
+  const frameHeight = Math.max(labelY, referenceLabelY);
+  const roundLabels = spacing > frameHeight * 0.08;
 
   const intactLabel = useRef<HTMLSpanElement>(null);
   const cutLabel = useRef<HTMLSpanElement>(null);
+  const referenceLabel = useRef<HTMLSpanElement>(null);
   const tooltip = useRef<HTMLDivElement>(null);
 
   return (
@@ -36,18 +52,20 @@ export function Viewer(props: Props) {
         </Environment>
         <directionalLight position={[2, 6, 4]} intensity={0.6} />
 
-        <Framing controls={controls} id={props.cartridge.id} width={spacing + model.radius * 2} height={labelY} depth={model.radius * 2} />
+        <Framing controls={controls} id={props.frameId} centerX={centerX} width={right - left} height={frameHeight} depth={depth} />
         <Round model={model} cut={false} x={-spacing / 2} hovered={props.highlighted} onHover={props.onHover} />
         <Round model={model} cut x={spacing / 2} hovered={props.highlighted} onHover={props.onHover} />
-        <Anchor element={intactLabel} position={[-spacing / 2, labelY, 0]} />
-        <Anchor element={cutLabel} position={[spacing / 2, labelY, 0]} />
+        {roundLabels && <Anchor element={intactLabel} position={[-spacing / 2, labelY, 0]} />}
+        {roundLabels && <Anchor element={cutLabel} position={[spacing / 2, labelY, 0]} />}
+        {reference && <ReferenceObject reference={reference} x={referenceX} onHover={props.onHover} />}
+        {reference && <Anchor element={referenceLabel} position={[referenceX, referenceLabelY, 0]} />}
         <Anchor element={tooltip} position={props.hover?.point ?? null} />
 
         <ContactShadows
-          key={`shadow-${props.cartridge.id}`}
-          position={[0, -model.height * 0.0005, 0]}
-          scale={[spacing * 3, model.radius * 8]}
-          far={model.height * 0.5}
+          key={`shadow-${props.frameId}-${reference?.id ?? "none"}`}
+          position={[0, -sceneHeight * 0.0005, 0]}
+          scale={[Math.max(-left, right) * 3.2, Math.max(model.radius * 8, depth * 4)]}
+          far={sceneHeight * 0.5}
           blur={2.2}
           opacity={0.6}
           resolution={1024}
@@ -56,12 +74,21 @@ export function Viewer(props: Props) {
         <OrbitControls ref={controls} makeDefault enableDamping />
       </Canvas>
 
-      <span ref={intactLabel} className="pointer-events-none absolute top-0 left-0 -translate-x-1/2 -translate-y-full text-xs font-medium tracking-wide text-neutral-500 select-none">
-        Intact
-      </span>
-      <span ref={cutLabel} className="pointer-events-none absolute top-0 left-0 -translate-x-1/2 -translate-y-full text-xs font-medium tracking-wide text-neutral-500 select-none">
-        Cutaway
-      </span>
+      {roundLabels && (
+        <>
+          <span ref={intactLabel} className="pointer-events-none absolute top-0 left-0 -translate-x-1/2 -translate-y-full text-xs font-medium tracking-wide text-neutral-500 select-none">
+            Intact
+          </span>
+          <span ref={cutLabel} className="pointer-events-none absolute top-0 left-0 -translate-x-1/2 -translate-y-full text-xs font-medium tracking-wide text-neutral-500 select-none">
+            Cutaway
+          </span>
+        </>
+      )}
+      {reference && (
+        <span ref={referenceLabel} className="pointer-events-none absolute top-0 left-0 -translate-x-1/2 -translate-y-full text-xs font-medium tracking-wide whitespace-nowrap text-neutral-500 select-none">
+          {reference.name}
+        </span>
+      )}
       <div ref={tooltip} className="pointer-events-none absolute top-0 left-0">
         {props.hover && (
           <div className="ml-3 -translate-y-1/2 rounded-md bg-neutral-900/90 px-2 py-1 text-xs whitespace-nowrap text-neutral-100 ring-1 ring-white/10">
@@ -93,6 +120,7 @@ const viewDirection = new THREE.Vector3(0.22, 0.3, 1).normalize();
 type FramingProps = {
   controls: RefObject<ComponentRef<typeof OrbitControls> | null>;
   id: string;
+  centerX: number;
   width: number;
   height: number;
   depth: number;
@@ -109,14 +137,14 @@ function Framing(props: FramingProps) {
     const fitHeight = props.height / 2 / Math.tan(halfFov);
     const fitWidth = props.width / 2 / (Math.tan(halfFov) * aspect);
     const distance = Math.max(fitHeight, fitWidth) * 1.18 + props.depth;
-    const target = new THREE.Vector3(0, props.height * 0.47, 0);
+    const target = new THREE.Vector3(props.centerX, props.height * 0.47, 0);
     camera.position.copy(target).addScaledVector(viewDirection, distance);
     camera.near = distance / 200;
     camera.far = distance * 50;
     camera.updateProjectionMatrix();
     controls.target.copy(target);
     controls.update();
-  }, [props.controls, props.id, props.width, props.height, props.depth, camera, aspect]);
+  }, [props.controls, props.id, props.centerX, props.width, props.height, props.depth, camera, aspect]);
 
   return null;
 }
